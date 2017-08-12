@@ -1,11 +1,14 @@
 package net.morimekta.providence.storage.hazelcast;
 
 import net.morimekta.providence.PMessage;
+import net.morimekta.providence.PMessageBuilder;
 import net.morimekta.providence.descriptor.PField;
 import net.morimekta.providence.storage.MessageStore;
 
+import com.google.common.collect.ImmutableMap;
 import com.hazelcast.core.ICompletableFuture;
 import com.hazelcast.core.IMap;
+import com.hazelcast.nio.serialization.Portable;
 
 import javax.annotation.Nonnull;
 import java.util.Collection;
@@ -15,38 +18,50 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 /**
- * Note that the hazelcast message store is backed by the PMessage
- * serializable property, which makes the message fields <b>not indexable</b>.
- * If that is needed, use the {@link HazelcastMessageBuilderStorage} instead.
- * <p>
- * On the other hand, this type of map is somewhat more efficient, and does not
- * require the message to be generated with hazelcast portable
- * support.
+ *
  */
-public class HazelcastMessageStorage<Key, Message extends PMessage<Message, Field>, Field extends PField>
+public class HazelcastMessageBuilderStorage<
+        Key,
+        Message extends PMessage<Message, Field>,
+        Field extends PField,
+        Builder extends PMessageBuilder<Message, Field> & Portable>
         implements MessageStore<Key, Message, Field> {
-    private final IMap<Key, Message> hazelcastMap;
+    private final IMap<Key, Builder> hazelcastMap;
 
-    public HazelcastMessageStorage(IMap<Key, Message> hazelcastMap) {
+    public HazelcastMessageBuilderStorage(IMap<Key, Builder> hazelcastMap) {
         this.hazelcastMap = hazelcastMap;
     }
 
     @Nonnull
     @Override
+    @SuppressWarnings("unchecked")
     public Map<Key, Message> putAll(@Nonnull Map<Key, Message> values) {
-        Map<Key, ICompletableFuture<Message>> futureMap = new HashMap<>();
-        values.forEach((key, message) -> futureMap.put(key, hazelcastMap.putAsync(key, message)));
+        Map<Key, Builder> tmpIn = new HashMap<>();
+        values.forEach((key, message) -> tmpIn.put(key, (Builder) message.mutate()));
+        Map<Key, Builder> tmpOut = putAllBuilders(tmpIn);
         Map<Key, Message> ret = new HashMap<>();
+        tmpOut.forEach((key, builder) -> ret.put(key, builder.build()));
+        return ImmutableMap.copyOf(ret);
+    }
+
+    @Nonnull
+    @Override
+    @SuppressWarnings("unchecked")
+    public <B extends PMessageBuilder<Message, Field>> Map<Key, B> putAllBuilders(@Nonnull Map<Key, B> builders) {
+        Map<Key, ICompletableFuture<Builder>> futureMap = new HashMap<>();
+        builders.forEach((key, builder) -> futureMap.put(key, hazelcastMap.putAsync(key, (Builder) builder)));
+        Map<Key, B> ret = new HashMap<>();
         futureMap.forEach((key, future) -> {
             try {
-                Message value = future.get();
+                Builder value = future.get();
                 if (value != null) {
-                    ret.put(key, value);
+                    ret.put(key, (B) value);
                 }
             } catch (ExecutionException | InterruptedException e) {
                 // TODO: Figure out if we timed out or were interrupted...
                 throw new RuntimeException(e.getMessage(), e);
             }
+
         });
         return ret;
     }
@@ -54,14 +69,14 @@ public class HazelcastMessageStorage<Key, Message extends PMessage<Message, Fiel
     @Nonnull
     @Override
     public Map<Key, Message> removeAll(Collection<Key> keys) {
-        Map<Key, ICompletableFuture<Message>> futureMap = new HashMap<>();
+        Map<Key, ICompletableFuture<Builder>> futureMap = new HashMap<>();
         keys.forEach(key -> futureMap.put(key, hazelcastMap.removeAsync(key)));
         Map<Key, Message> ret = new HashMap<>();
-        futureMap.forEach((key, future) -> {
+        futureMap.forEach((key, builder) -> {
             try {
-                Message value = future.get();
+                Builder value = builder.get();
                 if (value != null) {
-                    ret.put(key, value);
+                    ret.put(key, value.build());
                 }
             } catch (ExecutionException | InterruptedException e) {
                 // TODO: Figure out if we timed out or were interrupted...
@@ -74,10 +89,19 @@ public class HazelcastMessageStorage<Key, Message extends PMessage<Message, Fiel
     @Nonnull
     @Override
     public Map<Key, Message> getAll(@Nonnull Collection<Key> keys) {
-        Map<Key, Message> out = new HashMap<>();
+        Map<Key, Message> ret = new HashMap<>();
+        getAllBuilders(keys).forEach((key, builder) -> ret.put(key, builder.build()));
+        return ImmutableMap.copyOf(ret);
+    }
+
+    @Nonnull
+    @Override
+    @SuppressWarnings("unchecked")
+    public <B extends PMessageBuilder<Message, Field>> Map<Key, B> getAllBuilders(@Nonnull Collection<Key> keys) {
+        Map<Key, B> out = new HashMap<>();
         hazelcastMap.getAll(new HashSet<>(keys)).forEach((key, v) -> {
             if (v != null) {
-                out.put(key, v);
+                out.put(key, (B) v);
             }
         });
         return out;

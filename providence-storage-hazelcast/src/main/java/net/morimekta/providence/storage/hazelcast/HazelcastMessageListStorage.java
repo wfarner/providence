@@ -16,7 +16,9 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 /**
- *
+ * Note that the hazelcast message store is backed by the PMessage serializable
+ * properties, which makes the message field not indexed. If that is needed,
+ * use the {@link HazelcastMessageBuilderListStorage} instead.
  */
 public class HazelcastMessageListStorage<
         K, M extends PMessage<M, F>, F extends PField>
@@ -31,56 +33,53 @@ public class HazelcastMessageListStorage<
     @Override
     public Map<K, List<M>> putAll(@Nonnull Map<K, List<M>> values) {
         Map<K, ICompletableFuture<List<M>>> futureMap = new HashMap<>();
-        for (Map.Entry<K, List<M>> entry : values.entrySet()) {
-            futureMap.put(entry.getKey(), hazelcastMap.putAsync(entry.getKey(), entry.getValue()));
-        }
-        Map<K, List<M>> out = new HashMap<>();
-        for (Map.Entry<K, ICompletableFuture<List<M>>> futureEntry : futureMap.entrySet()) {
+        values.forEach((key, message) -> futureMap.put(key, hazelcastMap.putAsync(key, message)));
+        Map<K, List<M>> ret = new HashMap<>();
+        futureMap.forEach((key, future) -> {
             try {
-                List<M> value = futureEntry.getValue().get();
+                List<M> value = future.get();
                 if (value != null) {
-                    out.put(futureEntry.getKey(), value);
+                    ret.put(key, value);
                 }
             } catch (ExecutionException | InterruptedException e) {
                 // TODO: Figure out if we timed out or were interrupted...
                 throw new RuntimeException(e.getMessage(), e);
             }
-        }
-        return out;
+        });
+        return ret;
     }
 
     @Nonnull
     @Override
     public Map<K, List<M>> removeAll(Collection<K> keys) {
         Map<K, ICompletableFuture<List<M>>> futureMap = new HashMap<>();
-        for (K key : keys) {
-            futureMap.put(key, hazelcastMap.removeAsync(key));
-        }
-        Map<K, List<M>> out = new HashMap<>();
-        for (Map.Entry<K, ICompletableFuture<List<M>>> futureEntry : futureMap.entrySet()) {
+        keys.forEach(key -> futureMap.put(key, hazelcastMap.removeAsync(key)));
+        Map<K, List<M>> ret = new HashMap<>();
+        futureMap.forEach((key, future) -> {
             try {
-                List<M> value = futureEntry.getValue().get();
+                List<M> value = future.get();
                 if (value != null) {
-                    out.put(futureEntry.getKey(), value);
+                    ret.put(key, value);
                 }
             } catch (ExecutionException | InterruptedException e) {
                 // TODO: Figure out if we timed out or were interrupted...
                 throw new RuntimeException(e.getMessage(), e);
             }
-        }
-        return out;
+
+        });
+        return ret;
     }
 
     @Nonnull
     @Override
     public Map<K, List<M>> getAll(@Nonnull Collection<K> keys) {
-        Map<K, List<M>> out = new HashMap<>();
+        Map<K, List<M>> ret = new HashMap<>();
         hazelcastMap.getAll(new HashSet<>(keys)).forEach((k, v) -> {
             if (v != null) {
-                out.put(k, v);
+                ret.put(k, v);
             }
         });
-        return out;
+        return ret;
     }
 
     @Override
