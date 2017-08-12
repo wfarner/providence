@@ -26,7 +26,7 @@ public interface MessageStore<K, M extends PMessage<M,F>, F extends PField>
     Map<K,M> putAll(@Nonnull Map<K,M> values);
 
     /**
-     * Remove the values for the given keys;
+     * Remove the values for the given keys.
      * @param keys Map of removed key value pairs.
      * @return Map of removed key value pairs.
      */
@@ -48,6 +48,7 @@ public interface MessageStore<K, M extends PMessage<M,F>, F extends PField>
         return removeAll(ImmutableList.of(key)).get(key);
     }
 
+    @Nullable
     @SuppressWarnings("unchecked")
     default <B extends PMessageBuilder<M,F>>
     B putBuilder(@Nonnull K key, @Nonnull B builder) {
@@ -58,6 +59,7 @@ public interface MessageStore<K, M extends PMessage<M,F>, F extends PField>
         return null;
     }
 
+    @Nonnull
     @SuppressWarnings("unchecked")
     default <B extends PMessageBuilder<M,F>>
     Map<K,B> putAllBuilders(@Nonnull Map<K,B> builders) {

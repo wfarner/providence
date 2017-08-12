@@ -148,8 +148,6 @@ public class DirectoryMessageStore<K, M extends PMessage<M,F>, F extends PField>
                     }
                     cache.invalidate(key);
                     keyset.remove(key);
-                } else {
-                    out.put(key, null);
                 }
             }
             return out;

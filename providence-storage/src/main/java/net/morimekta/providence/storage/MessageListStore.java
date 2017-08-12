@@ -52,6 +52,7 @@ public interface MessageListStore<K, M extends PMessage<M,F>, F extends PField>
         return removeAll(ImmutableList.of(key)).get(key);
     }
 
+    @Nullable
     @SuppressWarnings("unchecked")
     default <B extends PMessageBuilder<M,F>>
     List<B> putBuilders(@Nonnull K key, @Nonnull List<B> builders) {
@@ -62,6 +63,7 @@ public interface MessageListStore<K, M extends PMessage<M,F>, F extends PField>
         return null;
     }
 
+    @Nonnull
     @SuppressWarnings("unchecked")
     default <B extends PMessageBuilder<M,F>>
     Map<K,List<B>> putAllBuilders(@Nonnull Map<K, List<B>> builders) {
