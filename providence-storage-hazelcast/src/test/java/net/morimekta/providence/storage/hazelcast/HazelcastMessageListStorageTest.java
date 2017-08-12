@@ -32,14 +32,14 @@ public class HazelcastMessageListStorageTest {
     @BeforeClass
     public static void setUpHazelcast() {
         Config config = new Config();
-        config.setInstanceName("test-list-storage");
+        config.setInstanceName("providence-storage-hazelcast");
         HazelcastStore_Factory.populateConfig(config);
         instance = HazelcastInstanceFactory.getOrCreateHazelcastInstance(config);
     }
 
     @Test
     public void testStorage() {
-        IMap<String, List<OptionalFields>> map = instance.getMap("test");
+        IMap<String, List<OptionalFields>> map = instance.getMap(getClass().getName());
 
         HazelcastMessageListStorage<String,OptionalFields,OptionalFields._Field> storage =
                 new HazelcastMessageListStorage<>(map);
