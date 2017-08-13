@@ -18,7 +18,7 @@ import java.util.concurrent.ExecutionException;
 /**
  * Note that the hazelcast message store is backed by the PMessage serializable
  * properties, which makes the message field not indexed. If that is needed,
- * use the {@link HazelcastMessageBuilderListStorage} instead.
+ * use the {@link HazelcastMessageBuilderStorage} instead.
  */
 public class HazelcastMessageListStorage<
         K, M extends PMessage<M, F>, F extends PField>

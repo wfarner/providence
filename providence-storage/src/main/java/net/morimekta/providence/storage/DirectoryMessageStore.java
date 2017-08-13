@@ -33,7 +33,7 @@ import java.util.function.Function;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 /**
- * Simple file-based storage of providence messages, that keeps
+ * Simple file-based storage of providence messages that keeps
  * an in-memory key index, a message cache, and stores messages
  * to individual files in a single directly.
  * <p>

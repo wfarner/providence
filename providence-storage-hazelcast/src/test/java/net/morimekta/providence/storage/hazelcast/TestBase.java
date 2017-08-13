@@ -19,9 +19,14 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 
+import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
+import java.util.UUID;
 
+import static net.morimekta.providence.testing.ProvidenceMatchers.equalToMessage;
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.CoreMatchers.hasItems;
 import static org.hamcrest.CoreMatchers.is;
@@ -38,6 +43,7 @@ public class TestBase {
     @BeforeClass
     public static void setUpHazelcast() {
         Config config = new Config();
+        config.setProperty("hazelcast.logging.type", "slf4j");
         config.setInstanceName("providence-storage-hazelcast");
         HazelcastStore_Factory.populateConfig(config);
         instance = HazelcastInstanceFactory.getOrCreateHazelcastInstance(config);
@@ -53,17 +59,18 @@ public class TestBase {
     @Rule
     public SimpleGeneratorWatcher generator = GeneratorWatcher.create();
 
-    OptionalFields                orig1;
-    OptionalFields                orig2;
-    OptionalFields._Builder       orig3;
-    OptionalFields._Builder       orig4;
-    List<OptionalFields>          list1;
-    List<OptionalFields>          list2;
-    List<OptionalFields._Builder> list3;
-    List<OptionalFields._Builder> list4;
+    private OptionalFields                orig1;
+    private OptionalFields                orig2;
+    private OptionalFields._Builder       orig3;
+    private OptionalFields._Builder       orig4;
+    private List<OptionalFields>          list1;
+    private List<OptionalFields>          list2;
+    private List<OptionalFields._Builder> list3;
+    private List<OptionalFields._Builder> list4;
 
     @Before
     public void setUp() {
+        generator.getBaseContext().setDefaultFillRate(0.75);
         orig1 = generator.generate(OptionalFields.kDescriptor);
         orig2 = generator.generate(OptionalFields.kDescriptor);
         orig3 = generator.generate(OptionalFields.kDescriptor).mutate();
@@ -120,9 +127,9 @@ public class TestBase {
         assertThat(get6, is(nullValue()));
 
         assertThat(get1, CoreMatchers.is(orig1));
-        assertThat(get2, CoreMatchers.is(orig2.mutate()));
+        assertThat(get2.build(), CoreMatchers.is(orig2));
         assertThat(get3, CoreMatchers.is(orig3.build()));
-        assertThat(get4, CoreMatchers.is(orig4));
+        assertThat(get4.build(), CoreMatchers.is(orig4.build()));
 
         // Check that getting all conforms.
         Map<String, OptionalFields> map1 = storage.getAll(ImmutableList.of("1234", "3456", "5678"));
@@ -165,21 +172,84 @@ public class TestBase {
         assertThat(put2, hasEntry("4567", orig4));
     }
 
-    void assertConformity(MessageListStore<String, OptionalFields, OptionalFields._Field> storage) {
-        assertThat(storage.put("1234", list1), is(nullValue()));
-        assertThat(storage.putAll(ImmutableMap.of("2345", list2)).keySet(), is(empty()));
-        assertThat(storage.putBuilders("3456", list3), is(nullValue()));
-        assertThat(storage.putAllBuilders(ImmutableMap.of("4567", list4)).keySet(), is(empty()));
+    void assertConformity(MessageListStore<String, OptionalFields, OptionalFields._Field> store) {
+        assertThat(store.put("1234", list1), is(nullValue()));
+        assertThat(store.putAll(ImmutableMap.of("2345", list2)).keySet(), is(empty()));
+        assertThat(store.putBuilders("3456", list3), is(nullValue()));
+        assertThat(store.putAllBuilders(ImmutableMap.of("4567", list4)).keySet(), is(empty()));
 
-        assertThat(storage.keys(), hasSize(4));
-        assertThat(storage.keys(), hasItems("1234", "2345", "3456", "4567"));
-        assertThat(storage.containsKey("1234"), is(true));
-        assertThat(storage.containsKey("5678"), is(false));
+        assertThat(store.keys(), hasSize(4));
+        assertThat(store.keys(), hasItems("1234", "2345", "3456", "4567"));
+        assertThat(store.containsKey("1234"), is(true));
+        assertThat(store.containsKey("5678"), is(false));
 
-        List<OptionalFields> opts = storage.get("1234");
+        List<OptionalFields> opts = store.get("1234");
 
         // Check that the values are the same.
         assertThat(opts, is(notNullValue()));
         assertThat(opts, is(list1));
+
+        for (int i = 0; i < 100; ++i) {
+            List<OptionalFields> list = new LinkedList<>();
+            for (int j = 0; j < 10; ++j) {
+                list.add(generator.generate(OptionalFields.kDescriptor));
+            }
+            store.put(UUID.randomUUID().toString(), list);
+        }
+        TreeSet<String> ids = new TreeSet<>(store.keys());
+
+        assertThat(ids, hasSize(104));
+        for (String id : ids) {
+            assertThat(store.containsKey(id), Matchers.is(true));
+        }
+        TreeSet<String> missing = new TreeSet<>();
+        for (int i = 0; i < 100; ++i) {
+            String uuid = UUID.randomUUID().toString();
+            assertThat(store.containsKey(uuid), Matchers.is(false));;
+            missing.add(uuid);
+        }
+
+        assertThat(store.getAll(missing).entrySet(), hasSize(0));
+        store.remove(ids.first());
+        store.removeAll(new ArrayList<>(ids).subList(45, 55));
+
+        assertThat(store.getAll(ids).entrySet(), hasSize(93));
+
+        Map<String, List<OptionalFields._Builder>> bld = store.getAllBuilders(new ArrayList<>(ids).subList(30, 45));
+
+        bld.forEach((k, list) -> {
+            for (OptionalFields._Builder b : list) {
+                b.clearBinaryValue();
+                b.clearBooleanValue();
+                b.clearByteValue();
+            }
+        });
+
+        store.putAllBuilders(bld);
+
+        Map<String, List<OptionalFields>> tmp2 = store.getAll(bld.keySet());
+        tmp2.forEach((k, list) -> {
+            for (OptionalFields v : list) {
+                assertThat(v.hasBooleanValue(), Matchers.is(false));
+                assertThat(v.hasByteValue(), Matchers.is(false));
+                assertThat(v.hasBinaryValue(), Matchers.is(false));
+            }
+        });
+
+        OptionalFields._Builder builder = OptionalFields.builder();
+        builder.setIntegerValue(10);
+        builder.setBooleanValue(true);
+        builder.setDoubleValue(12345.6789);
+        String uuid = UUID.randomUUID().toString();
+        store.putBuilders(uuid, ImmutableList.of(builder));
+
+        List<OptionalFields> list = store.get(uuid);
+        assertThat(list, hasSize(1));
+        assertThat(list, Matchers.hasItem(builder.build()));
+
+        List<OptionalFields._Builder> otherBuilder = store.getBuilders(uuid);
+
+        assertThat(otherBuilder, hasSize(1));
+        assertThat(otherBuilder.get(0).build(), Matchers.is(equalToMessage(builder.build())));
     }
 }

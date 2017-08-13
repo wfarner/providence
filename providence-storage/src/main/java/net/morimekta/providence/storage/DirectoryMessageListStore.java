@@ -35,8 +35,8 @@ import java.util.stream.Collectors;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 /**
- * Simple file-based storage of providence messages, that keeps
- * an in-memory key index, a message cache, and stores messages
+ * Simple file-based storage of lists of providence messages that keeps
+ * an in-memory key index, a message cache, and stores message lists
  * to individual files in a single directly.
  * <p>
  * Note that the directory store is parallel compatible between

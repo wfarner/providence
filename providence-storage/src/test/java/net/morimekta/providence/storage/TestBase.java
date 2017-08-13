@@ -11,9 +11,14 @@ import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Rule;
 
+import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
+import java.util.UUID;
 
+import static net.morimekta.providence.testing.ProvidenceMatchers.equalToMessage;
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.CoreMatchers.hasItems;
 import static org.hamcrest.CoreMatchers.is;
@@ -156,5 +161,68 @@ public class TestBase {
         // Check that the values are the same.
         assertThat(opts, is(notNullValue()));
         assertThat(opts, is(list1));
+
+        for (int i = 0; i < 100; ++i) {
+            List<OptionalFields> list = new LinkedList<>();
+            for (int j = 0; j < 10; ++j) {
+                list.add(generator.generate(OptionalFields.kDescriptor));
+            }
+            storage.put(UUID.randomUUID().toString(), list);
+        }
+        TreeSet<String> ids = new TreeSet<>(storage.keys());
+
+        assertThat(ids, hasSize(104));
+        for (String id : ids) {
+            assertThat(storage.containsKey(id), Matchers.is(true));
+        }
+        TreeSet<String> missing = new TreeSet<>();
+        for (int i = 0; i < 100; ++i) {
+            String uuid = UUID.randomUUID().toString();
+            assertThat(storage.containsKey(uuid), Matchers.is(false));;
+            missing.add(uuid);
+        }
+
+        assertThat(storage.getAll(missing).entrySet(), hasSize(0));
+        storage.remove(ids.first());
+        storage.removeAll(new ArrayList<>(ids).subList(45, 55));
+
+        assertThat(storage.getAll(ids).entrySet(), hasSize(93));
+
+        Map<String, List<OptionalFields._Builder>> bld = storage.getAllBuilders(new ArrayList<>(ids).subList(30, 45));
+
+        bld.forEach((k, list) -> {
+            for (OptionalFields._Builder b : list) {
+                b.clearBinaryValue();
+                b.clearBooleanValue();
+                b.clearByteValue();
+            }
+        });
+
+        storage.putAllBuilders(bld);
+
+        Map<String, List<OptionalFields>> tmp2 = storage.getAll(bld.keySet());
+        tmp2.forEach((k, list) -> {
+            for (OptionalFields v : list) {
+                assertThat(v.hasBooleanValue(), Matchers.is(false));
+                assertThat(v.hasByteValue(), Matchers.is(false));
+                assertThat(v.hasBinaryValue(), Matchers.is(false));
+            }
+        });
+
+        OptionalFields._Builder builder = OptionalFields.builder();
+        builder.setIntegerValue(10);
+        builder.setBooleanValue(true);
+        builder.setDoubleValue(12345.6789);
+        String uuid = UUID.randomUUID().toString();
+        storage.putBuilders(uuid, ImmutableList.of(builder));
+
+        List<OptionalFields> list = storage.get(uuid);
+        assertThat(list, hasSize(1));
+        assertThat(list, Matchers.hasItem(builder.build()));
+
+        List<OptionalFields._Builder> otherBuilder = storage.getBuilders(uuid);
+
+        assertThat(otherBuilder, hasSize(1));
+        assertThat(otherBuilder.get(0).build(), Matchers.is(equalToMessage(builder.build())));
     }
 }
