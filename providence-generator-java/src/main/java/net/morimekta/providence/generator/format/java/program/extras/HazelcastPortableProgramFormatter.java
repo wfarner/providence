@@ -245,8 +245,8 @@ public class HazelcastPortableProgramFormatter implements BaseProgramFormatter {
                         getHazelcastClassId(message.instanceType()))
               .begin()
               .begin();
+        writer.formatln(".addIntArrayField(\"__fields__\")");
         for (JField field : message.declaredOrderFields()) {
-            writer.formatln(".addBooleanField(\"%s\")", field.hasName());
             appendTypeField(field);
         }
         writer.appendln(".build();")
@@ -258,9 +258,13 @@ public class HazelcastPortableProgramFormatter implements BaseProgramFormatter {
     }
 
     private void appendTypeField(JField field) {
+        if (field.portableRequiresBinarySerialization()) {
+            writer.formatln(".addByteArrayField(\"%s\")", field.name());
+            return;
+        }
+
         switch (field.type()) {
             case BINARY:
-            case MAP:
                 writer.formatln(".addByteArrayField(\"%s\")", field.name());
                 break;
             case BYTE:
@@ -286,32 +290,20 @@ public class HazelcastPortableProgramFormatter implements BaseProgramFormatter {
                 writer.formatln(".addUTFField(\"%s\")", field.name());
                 break;
             case LIST:
-                if ( field.isUnion() ) {
-                    writer.formatln(".addByteArrayField(\"%s\")", field.name());
-                } else {
-                    final PList pList = field.toPList();
-                    appendCollectionTypeField(field, pList.itemDescriptor());
-                }
+                final PList pList = field.toPList();
+                appendCollectionTypeField(field, pList.itemDescriptor());
                 break;
             case SET:
-                if ( field.isUnion() ) {
-                    writer.formatln(".addByteArrayField(\"%s\")", field.name());
-                } else {
-                    final PSet pSet = field.toPSet();
-                    appendCollectionTypeField(field, pSet.itemDescriptor());
-                }
+                final PSet pSet = field.toPSet();
+                appendCollectionTypeField(field, pSet.itemDescriptor());
                 break;
             case MESSAGE:
-                if ( field.isUnion() ) {
-                    writer.formatln(".addByteArrayField(\"%s\")", field.name());
-                } else {
-                    writer.formatln(".addPortableField(\"%s\", %s())",
-                                    field.name(),
-                                    camelCase("get",
-                                              field.field()
-                                                   .getDescriptor()
-                                                   .getName() + "Definition"));
-                }
+                writer.formatln(".addPortableField(\"%s\", %s())",
+                                field.name(),
+                                camelCase("get",
+                                          field.field()
+                                               .getDescriptor()
+                                               .getName() + "Definition"));
                 break;
             default:
                 throw new GeneratorException("Not implemented appendTypeField for type: " + field.type() + " in " +

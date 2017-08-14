@@ -16,7 +16,6 @@ import io.codearte.jfairy.Fairy;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Rule;
-import org.junit.rules.ExpectedException;
 
 import java.util.List;
 import java.util.Map;
@@ -39,9 +38,6 @@ public class GenericMethods {
         final String logging = "hazelcast.logging.type";
         System.setProperty(logging, "slf4j");
     }
-
-    @Rule
-    public ExpectedException exception = ExpectedException.none();
 
     @Rule
     public SimpleGeneratorWatcher generator = GeneratorWatcher.create();

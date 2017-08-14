@@ -7,6 +7,10 @@ import com.hazelcast.nio.serialization.HazelcastSerializationException;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static org.hamcrest.CoreMatchers.is;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.fail;
+
 /**
  * In version 1 to version 2 we have changed from the structure to add one field for the OptionalFields
  * as seen below, and OptionalListFields that you can see at {@link net.morimekta.test.hazelcast.v1.OptionalListFields}
@@ -113,16 +117,21 @@ public class HazelcastVersion1ToVersion2Test extends GenericMethods {
 
     @Test
     public void testV2WithV1Config() throws InterruptedException {
-        exception.expect(HazelcastSerializationException.class);
-        exception.expectMessage("Invalid field name: 'anotherStringValue' for ClassDefinition {id: 2, version: 1}");
+        try {
+            String mapName = nextString();
 
-        String mapName = nextString();
+            IMap<String, net.morimekta.test.hazelcast.v2.OptionalFields._Builder> writeMap = instance1.getMap(mapName);
 
-        IMap<String, net.morimekta.test.hazelcast.v2.OptionalFields._Builder> writeMap = instance1.getMap(mapName);
+            generator.getBaseContext()
+                     .setDefaultFillRate(1.0);
+            net.morimekta.test.hazelcast.v2.OptionalFields expected = generator.generate(net.morimekta.test.hazelcast.v2.OptionalFields.kDescriptor);
 
-        net.morimekta.test.hazelcast.v2.OptionalFields expected = generator.generate(net.morimekta.test.hazelcast.v2.OptionalFields.kDescriptor);
+            String key = nextString();
+            writeMap.put(key, expected.mutate());
 
-        String key = nextString();
-        writeMap.put(key, expected.mutate());
+            fail("no exception");
+        } catch (HazelcastSerializationException e) {
+            assertThat(e.getMessage(), is("Invalid field name: 'anotherStringValue' for ClassDefinition {id: 2, version: 1}"));
+        }
     }
 }
